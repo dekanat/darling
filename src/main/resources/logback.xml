@@ -8,9 +8,9 @@
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/clea.log</file>
+        <file>logs/darling.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>clea.%d{yyyy-MM-dd}.log.zip</fileNamePattern>
+            <fileNamePattern>darling.%d{yyyy-MM-dd}.log.zip</fileNamePattern>
             <maxHistory>5</maxHistory>
         </rollingPolicy>
         <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
