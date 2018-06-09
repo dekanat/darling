@@ -18,6 +18,8 @@ import com.google.api.services.gmail.{Gmail, GmailScopes}
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 
+import scala.collection.JavaConversions._
+
 /**
   * Created by spectrum on 5/14/2018.
   */
@@ -25,13 +27,15 @@ import com.typesafe.scalalogging.Logger
 
 final class InvalidPayloadException(val msg: String) extends Throwable
 
+final class ClientNotFoundException(val msg: String) extends Throwable
+
 // This is the mail builder despite the name
 final case class MailPayload(var from: String = "",
-                       var to: String = "",
-                       var subject: String = "",
-                       var message: String = "",
-                       var cc: List[String] = List[String](),
-                       var bcc: List[String] = List[String]())
+                             var to: String = "",
+                             var subject: String = "",
+                             var message: String = "",
+                             var cc: List[String] = List[String](),
+                             var bcc: List[String] = List[String]())
 
 final class Mail {
 
@@ -50,12 +54,14 @@ final class Mail {
   }
 
   def andSubject(subject: String) = withSubject(subject)
+
   def withSubject(subject: String) = {
     payload.subject = subject
     this
   }
 
   def andMessage(message: String) = withMessage(message)
+
   def withMessage(message: String) = {
     payload.message = message
     this
@@ -74,6 +80,21 @@ final class Mail {
   @throws(classOf[InvalidPayloadException])
   def darling: Unit = {
     if (isPayloadValid) {
+      val gmailUser = payload.from.takeWhile(_ != "@")
+      val service = {
+        Mail.services.get(gmailUser) match {
+          case Some(s) => s
+          case None => {
+            val s = new Gmail.Builder(httpTransport, jsonFactory, Mail.getCredentials(gmailUser))
+              .setApplicationName(appName)
+              .build()
+
+            Mail.services.add(gmailUser -> s)
+            s
+          }
+        }
+      }
+
       val email = createEmail(payload)
       sendMessage(service, "me", email)
     } else {
@@ -99,28 +120,30 @@ private object Mail {
 
   val conf = ConfigFactory.load()
 
-  private val jsonFactory = JacksonFactory.getDefaultInstance()
+  private lazy val jsonFactory = JacksonFactory.getDefaultInstance()
 
-  private val credentialsFolder = conf.getString("darling.credentials-folder")
-  private val clientSecretFile = conf.getString("darling.client-secret")
-  private val appName = conf.getString("darling.app-name")
-  private val gmailAccessType = conf.getString("darling.access-type")
-  private val gmailUser = conf.getString("darling.gamil-user")
+  private val services = Map[String, Gmail]()
+
+  private lazy val credentialsFolder = conf.getString("darling.credentials-folder")
+  private lazy val clients = conf.getConfigList("darling.clients")
+  private lazy val appName = conf.getString("darling.app-name")
+  private lazy val gmailAccessType = conf.getString("darling.access-type")
 
   private val scopes = new util.ArrayList[String]()
   scopes.add(GmailScopes.GMAIL_COMPOSE)
   scopes.add(GmailScopes.GMAIL_SEND)
 
-  private lazy val clientId: InputStream = getClass.getResourceAsStream(clientSecretFile)
   private val httpTransport = GoogleNetHttpTransport.newTrustedTransport()
-
-  private val service = new Gmail.Builder(httpTransport, jsonFactory, getCredentials)
-    .setApplicationName(appName)
-    .build()
 
   private val logger = Logger[Mail]
 
-  private def getCredentials = {
+  private def getCredentials(gmailUser: String) = {
+    val client = clients.filter(p => p.getString("name") == gmailUser).headOption.getOrElse(null)
+
+    if (client == null)
+      throw new ClientNotFoundException(s"Client $gmailUser not found in configs")
+
+    val clientId: InputStream = getClass.getResourceAsStream(client.getString("secret"))
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new InputStreamReader(clientId))
 
     val flow = new GoogleAuthorizationCodeFlow.Builder(httpTransport, jsonFactory, clientSecrets, scopes)

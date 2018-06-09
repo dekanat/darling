@@ -1,12 +1,6 @@
 group 'dekanat'
 version '1.0'
 
-buildscript {
-    repositories {
-        jcenter()
-    }
-}
-
 apply plugin: 'scala'
 
 sourceSets {
