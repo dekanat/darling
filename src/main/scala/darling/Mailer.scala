@@ -3,9 +3,9 @@ package darling
 import java.io.{ByteArrayOutputStream, InputStream, InputStreamReader}
 import java.util
 import java.util.Properties
+
 import javax.mail.internet.{InternetAddress, MimeMessage}
 import javax.mail.{Address, Session}
-
 import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp
 import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver
 import com.google.api.client.googleapis.auth.oauth2.{GoogleAuthorizationCodeFlow, GoogleClientSecrets}
@@ -15,16 +15,15 @@ import com.google.api.client.util.Base64
 import com.google.api.client.util.store.FileDataStoreFactory
 import com.google.api.services.gmail.model.Message
 import com.google.api.services.gmail.{Gmail, GmailScopes}
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 
 /**
   * Created by spectrum on 5/14/2018.
   */
-
-
 final class InvalidPayloadException(val msg: String) extends Throwable
 
 final class ClientNotFoundException(val msg: String) extends Throwable
@@ -34,8 +33,8 @@ final case class MailPayload(var from: String = "",
                              var to: String = "",
                              var subject: String = "",
                              var message: String = "",
-                             var cc: List[String] = List[String](),
-                             var bcc: List[String] = List[String]())
+                             var cc: List[String] = Nil,
+                             var bcc: List[String] = Nil)
 
 final class Mail {
 
@@ -80,7 +79,7 @@ final class Mail {
   @throws(classOf[InvalidPayloadException])
   def darling: Unit = {
     if (isPayloadValid) {
-      val gmailUser = payload.from.takeWhile(_ != "@")
+      val gmailUser = payload.from.takeWhile(_ != '@')
       val service = {
         Mail.services.get(gmailUser) match {
           case Some(s) => s
@@ -89,7 +88,7 @@ final class Mail {
               .setApplicationName(appName)
               .build()
 
-            Mail.services.add(gmailUser -> s)
+            Mail.services.put(gmailUser, s)
             s
           }
         }
@@ -122,7 +121,7 @@ private object Mail {
 
   private lazy val jsonFactory = JacksonFactory.getDefaultInstance()
 
-  private val services = Map[String, Gmail]()
+  private val services = mutable.Map[String, Gmail]()
 
   private lazy val credentialsFolder = conf.getString("darling.credentials-folder")
   private lazy val clients = conf.getConfigList("darling.clients")
@@ -143,7 +142,7 @@ private object Mail {
     if (client == null)
       throw new ClientNotFoundException(s"Client $gmailUser not found in configs")
 
-    val clientId: InputStream = getClass.getResourceAsStream(client.getString("secret"))
+    val clientId: InputStream = getClass.getResourceAsStream((client.asInstanceOf[Config]).getString("secret"))
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new InputStreamReader(clientId))
 
     val flow = new GoogleAuthorizationCodeFlow.Builder(httpTransport, jsonFactory, clientSecrets, scopes)
