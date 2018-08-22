@@ -1,5 +1,6 @@
 package examples
 
+import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver
 import darling.{Mail, send}
 
 /**
@@ -7,6 +8,8 @@ import darling.{Mail, send}
   */
 class TestMailer {
   def main(args: Array[String]) {
-    send a new Mail from "rick_c123@citadel.com" to "rick_c21@citadel.com" withSubject "Rogue Morty" andMessage "No more" darling
+    Mail.verificationCodeReceiver = new LocalServerReceiver()
+
+    send a new Mail from "leia@gmail.com" to "obi_wan@wherever.io" withSubject "Help" andMessage "Help me, Obi-Wan Kenobi. You're my only hope." darling
   }
 }

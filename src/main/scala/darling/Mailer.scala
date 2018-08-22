@@ -4,10 +4,7 @@ import java.io.{ByteArrayOutputStream, InputStream, InputStreamReader}
 import java.util
 import java.util.Properties
 
-import javax.mail.internet.{InternetAddress, MimeMessage}
-import javax.mail.{Address, Session}
-import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp
-import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver
+import com.google.api.client.extensions.java6.auth.oauth2.{AuthorizationCodeInstalledApp, VerificationCodeReceiver}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleAuthorizationCodeFlow, GoogleClientSecrets}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
@@ -17,6 +14,8 @@ import com.google.api.services.gmail.model.Message
 import com.google.api.services.gmail.{Gmail, GmailScopes}
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
+import javax.mail.internet.{InternetAddress, MimeMessage}
+import javax.mail.{Address, Session}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -24,6 +23,8 @@ import scala.collection.mutable
 /**
   * Created by spectrum on 5/14/2018.
   */
+final class MailerNotConfigured(val msg: String) extends Throwable
+
 final class InvalidPayloadException(val msg: String) extends Throwable
 
 final class ClientNotFoundException(val msg: String) extends Throwable
@@ -77,7 +78,11 @@ final class Mail {
   }
 
   @throws(classOf[InvalidPayloadException])
+  @throws(classOf[MailerNotConfigured])
   def darling: Unit = {
+    if (!Mail.isConfigured)
+      throw new MailerNotConfigured("Mailer not configured!")
+
     if (isPayloadValid) {
       val gmailUser = payload.from.takeWhile(_ != '@')
       val service = {
@@ -113,28 +118,31 @@ final class Mail {
   }
 }
 
-private object Mail {
+object Mail {
 
   import javax.mail.Message._
 
-  val conf = ConfigFactory.load()
+  private val conf = ConfigFactory.load()
 
-  private lazy val jsonFactory = JacksonFactory.getDefaultInstance()
+  private val jsonFactory = JacksonFactory.getDefaultInstance()
 
   private val services = mutable.Map[String, Gmail]()
 
-  private lazy val credentialsFolder = conf.getString("darling.credentials-folder")
-  private lazy val clients = conf.getConfigList("darling.clients")
-  private lazy val appName = conf.getString("darling.app-name")
-  private lazy val gmailAccessType = conf.getString("darling.access-type")
+  private val credentialsFolder = conf.getString("darling.credentials-folder")
+  private val clients = conf.getConfigList("darling.clients")
+  private val appName = conf.getString("darling.app-name")
+  private val gmailAccessType = conf.getString("darling.access-type")
+
+  var verificationCodeReceiver: VerificationCodeReceiver = null
 
   private val scopes = new util.ArrayList[String]()
-  scopes.add(GmailScopes.GMAIL_COMPOSE)
-  scopes.add(GmailScopes.GMAIL_SEND)
+  scopes.addAll(GmailScopes.all())
 
   private val httpTransport = GoogleNetHttpTransport.newTrustedTransport()
 
   private val logger = Logger[Mail]
+
+  def isConfigured = verificationCodeReceiver != null
 
   private def getCredentials(gmailUser: String) = {
     val client = clients.filter(p => p.getString("name") == gmailUser).headOption.getOrElse(null)
@@ -142,7 +150,7 @@ private object Mail {
     if (client == null)
       throw new ClientNotFoundException(s"Client $gmailUser not found in configs")
 
-    val clientId: InputStream = getClass.getResourceAsStream((client.asInstanceOf[Config]).getString("secret"))
+    val clientId: InputStream = getClass.getResourceAsStream(s"/${(client.asInstanceOf[Config]).getString("secret")}")
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new InputStreamReader(clientId))
 
     val flow = new GoogleAuthorizationCodeFlow.Builder(httpTransport, jsonFactory, clientSecrets, scopes)
@@ -150,7 +158,7 @@ private object Mail {
       .setAccessType(gmailAccessType)
       .build()
 
-    new AuthorizationCodeInstalledApp(flow, new LocalServerReceiver()).authorize(gmailUser)
+    new AuthorizationCodeInstalledApp(flow, verificationCodeReceiver).authorize(gmailUser)
   }
 
   private def createEmail(payload: MailPayload) = {
