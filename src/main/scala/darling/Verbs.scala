@@ -5,13 +5,13 @@ package darling
   */
 
 object send {
-  def a(mail: Mail) = new Mail
+  def a(mail: Darling) = new Darling
 }
 
 object reply {
-  def to = new Mail
+  def to = new Darling
 }
 
 object draft {
-  def a(mail: Mail) = new Mail
+  def a(mail: Darling) = new Darling
 }

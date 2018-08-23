@@ -1,7 +1,6 @@
 package darling
 
 import java.io.{ByteArrayOutputStream, InputStream, InputStreamReader}
-import java.util
 import java.util.Properties
 
 import com.google.api.client.extensions.java6.auth.oauth2.{AuthorizationCodeInstalledApp, VerificationCodeReceiver}
@@ -10,25 +9,19 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.client.util.Base64
 import com.google.api.client.util.store.FileDataStoreFactory
+import com.google.api.services.gmail.Gmail
 import com.google.api.services.gmail.model.Message
-import com.google.api.services.gmail.{Gmail, GmailScopes}
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import javax.mail.internet.{InternetAddress, MimeMessage}
 import javax.mail.{Address, Session}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 /**
   * Created by spectrum on 5/14/2018.
   */
-final class MailerNotConfigured(val msg: String) extends Throwable
-
-final class InvalidPayloadException(val msg: String) extends Throwable
-
-final class ClientNotFoundException(val msg: String) extends Throwable
-
 // This is the mail builder despite the name
 final case class MailPayload(var from: String = "",
                              var to: String = "",
@@ -37,9 +30,9 @@ final case class MailPayload(var from: String = "",
                              var cc: List[String] = Nil,
                              var bcc: List[String] = Nil)
 
-final class Mail {
+final class Darling {
 
-  import Mail._
+  import Darling._
 
   val payload = MailPayload()
 
@@ -80,20 +73,20 @@ final class Mail {
   @throws(classOf[InvalidPayloadException])
   @throws(classOf[MailerNotConfigured])
   def darling: Unit = {
-    if (!Mail.isConfigured)
+    if (!Darling.isConfigured)
       throw new MailerNotConfigured("Mailer not configured!")
 
     if (isPayloadValid) {
       val gmailUser = payload.from.takeWhile(_ != '@')
       val service = {
-        Mail.services.get(gmailUser) match {
+        Darling.services.get(gmailUser) match {
           case Some(s) => s
           case None => {
-            val s = new Gmail.Builder(httpTransport, jsonFactory, Mail.getCredentials(gmailUser))
+            val s = new Gmail.Builder(httpTransport, jsonFactory, Darling.getCredentials(gmailUser))
               .setApplicationName(appName)
               .build()
 
-            Mail.services.put(gmailUser, s)
+            Darling.services.put(gmailUser, s)
             s
           }
         }
@@ -118,47 +111,109 @@ final class Mail {
   }
 }
 
-object Mail {
+case class DarlingConfiguration(verificationCodeReceiver: VerificationCodeReceiver) {
+  def isValid: Boolean = verificationCodeReceiver != null
+}
+
+@throws(classOf[InvalidDarlingConfigException])
+object Darling {
 
   import javax.mail.Message._
 
   private val conf = ConfigFactory.load()
 
-  private val jsonFactory = JacksonFactory.getDefaultInstance()
+  private val jsonFactory = JacksonFactory.getDefaultInstance
 
   private val services = mutable.Map[String, Gmail]()
 
-  private val credentialsFolder = conf.getString("darling.credentials-folder")
-  private val clients = conf.getConfigList("darling.clients")
-  private val appName = conf.getString("darling.app-name")
-  private val gmailAccessType = conf.getString("darling.access-type")
+  private val credentialsFolder = {
+    val confPath = "darling.credentials-folder"
 
-  var verificationCodeReceiver: VerificationCodeReceiver = null
+    if (conf.hasPathOrNull(confPath)) {
+      if (conf.getIsNull(confPath)) {
+        throw new InvalidDarlingConfigException("Credential folder path cannot be null")
+      } else {
+        conf.getString(confPath)
+      }
+    } else {
+      throw new InvalidDarlingConfigException(s"$confPath key is missing from configs")
+    }
+  }
 
-  private val scopes = new util.ArrayList[String]()
-  scopes.addAll(GmailScopes.all())
+  private val appName = {
+    val confPath = "darling.app-name"
+
+    if (conf.hasPathOrNull(confPath)) {
+      if (conf.getIsNull(confPath)) {
+        throw new InvalidDarlingConfigException("App name cannot be null")
+      } else {
+        conf.getString(confPath)
+      }
+    } else {
+      throw new InvalidDarlingConfigException(s"$confPath key is missing from configs")
+    }
+  }
+
+  private val gmailAccessType = {
+    val confPath = "darling.access-type"
+
+    if (conf.hasPathOrNull(confPath)) {
+      if (conf.getIsNull(confPath)) {
+        throw new InvalidDarlingConfigException("GMail API Access type name cannot be null")
+      } else {
+        conf.getString(confPath)
+      }
+    } else {
+      throw new InvalidDarlingConfigException(s"$confPath key is missing from configs")
+    }
+  }
+
+  private val clients = {
+    val confPath = "darling.clients"
+
+    if (conf.hasPathOrNull(confPath)) {
+      if (conf.getIsNull(confPath)) {
+        throw new InvalidDarlingConfigException("GMail API clients parameter cannot be null")
+      } else {
+        val clientsRaw = conf.getConfigList(confPath)
+        clientsRaw.asScala map {
+          clientRaw => {
+            val client = new DarlingClient(clientRaw)
+            (client.name, client)
+          }
+        } toMap
+      }
+    } else {
+      throw new InvalidDarlingConfigException(s"$confPath key is missing from configs")
+    }
+  }
+
+  private var darlingConf: DarlingConfiguration = _
 
   private val httpTransport = GoogleNetHttpTransport.newTrustedTransport()
 
-  private val logger = Logger[Mail]
+  private val logger = Logger[Darling]
 
-  def isConfigured = verificationCodeReceiver != null
+  def configure(conf: DarlingConfiguration): Unit = darlingConf = conf
 
+  private def isConfigured = darlingConf != null && darlingConf.isValid
+
+  @throws(classOf[UnsupportedGmailScopeException])
   private def getCredentials(gmailUser: String) = {
-    val client = clients.filter(p => p.getString("name") == gmailUser).headOption.getOrElse(null)
+    val client = clients(gmailUser)
 
     if (client == null)
       throw new ClientNotFoundException(s"Client $gmailUser not found in configs")
 
-    val clientId: InputStream = getClass.getResourceAsStream(s"/${(client.asInstanceOf[Config]).getString("secret")}")
+    val clientId: InputStream = getClass.getResourceAsStream(s"/${client.secret}")
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new InputStreamReader(clientId))
 
-    val flow = new GoogleAuthorizationCodeFlow.Builder(httpTransport, jsonFactory, clientSecrets, scopes)
+    val flow = new GoogleAuthorizationCodeFlow.Builder(httpTransport, jsonFactory, clientSecrets, client.scopes.asJava)
       .setDataStoreFactory(new FileDataStoreFactory(new java.io.File(credentialsFolder)))
       .setAccessType(gmailAccessType)
       .build()
 
-    new AuthorizationCodeInstalledApp(flow, verificationCodeReceiver).authorize(gmailUser)
+    new AuthorizationCodeInstalledApp(flow, darlingConf.verificationCodeReceiver).authorize(gmailUser)
   }
 
   private def createEmail(payload: MailPayload) = {
@@ -195,14 +250,14 @@ object Mail {
   private def createMessageWithEmail(emailContent: MimeMessage) = {
     val buffer = new ByteArrayOutputStream()
     emailContent.writeTo(buffer)
-    val bytes = buffer.toByteArray()
+    val bytes = buffer.toByteArray
     val encodedEmail = Base64.encodeBase64URLSafeString(bytes)
     val message = new Message()
     message.setRaw(encodedEmail)
     message
   }
 
-  private def sendMessage(service: Gmail, userId: String, emailContent: MimeMessage) = {
+  private def sendMessage(service: Gmail, userId: String, emailContent: MimeMessage): Unit = {
     var message = createMessageWithEmail(emailContent)
     message = service.users().messages().send(userId, message).execute()
 
