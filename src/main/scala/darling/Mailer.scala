@@ -30,9 +30,9 @@ final case class MailPayload(var from: String = "",
                              var cc: List[String] = Nil,
                              var bcc: List[String] = Nil)
 
-final class Darling {
+final class Mail {
 
-  import Darling._
+  import Mail._
 
   val payload = MailPayload()
 
@@ -73,20 +73,20 @@ final class Darling {
   @throws(classOf[InvalidPayloadException])
   @throws(classOf[MailerNotConfigured])
   def darling: Unit = {
-    if (!Darling.isConfigured)
+    if (!Mail.isConfigured)
       throw new MailerNotConfigured("Mailer not configured!")
 
     if (isPayloadValid) {
       val gmailUser = payload.from.takeWhile(_ != '@')
       val service = {
-        Darling.services.get(gmailUser) match {
+        Mail.services.get(gmailUser) match {
           case Some(s) => s
           case None => {
-            val s = new Gmail.Builder(httpTransport, jsonFactory, Darling.getCredentials(gmailUser))
+            val s = new Gmail.Builder(httpTransport, jsonFactory, Mail.getCredentials(gmailUser))
               .setApplicationName(appName)
               .build()
 
-            Darling.services.put(gmailUser, s)
+            Mail.services.put(gmailUser, s)
             s
           }
         }
@@ -116,7 +116,7 @@ case class DarlingConfiguration(verificationCodeReceiver: VerificationCodeReceiv
 }
 
 @throws(classOf[InvalidDarlingConfigException])
-object Darling {
+object Mail {
 
   import javax.mail.Message._
 
@@ -192,7 +192,7 @@ object Darling {
 
   private val httpTransport = GoogleNetHttpTransport.newTrustedTransport()
 
-  private val logger = Logger[Darling]
+  private val logger = Logger[Mail]
 
   def configure(conf: DarlingConfiguration): Unit = darlingConf = conf
 
