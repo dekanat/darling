@@ -1,4 +1,6 @@
 # Darling
+[![Build Status](https://travis-ci.org/dekanat/darling.svg?branch=master)](https://travis-ci.org/dekanat/darling)
+
 
 Darling is a [fluent](https://martinfowler.com/bliki/FluentInterface.html) GMail API implemented in Scala
 
