@@ -1,5 +1,0 @@
-language: scala
-scala:
-   - 2.12.2
-before_install:
-   - chmod +x gradlew
