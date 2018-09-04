@@ -3,10 +3,11 @@ language: scala
 install: true
 
 jdk:
-  - oraclejdk8
+    - oraclejdk8
 
 scala:
     - 2.12.2
 
 before_install:
+    - 'gradle wrapper'
     - 'chmod +x gradlew'
