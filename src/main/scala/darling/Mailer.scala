@@ -14,7 +14,7 @@ import com.google.api.services.gmail.model.Message
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import javax.mail.internet.{InternetAddress, MimeMessage}
-import javax.mail.{Address, Session}
+import javax.mail.{Address, MessagingException, Session}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -72,7 +72,7 @@ final class Mail {
 
   @throws(classOf[InvalidPayloadException])
   @throws(classOf[MailerNotConfigured])
-  def darling: Unit = {
+  def darling(implicit conf: DarlingConfiguration): Unit = {
     if (!Mail.isConfigured)
       throw new MailerNotConfigured("Mailer not configured!")
 

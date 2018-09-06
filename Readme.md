@@ -6,7 +6,7 @@ Darling is a [fluent](https://martinfowler.com/bliki/FluentInterface.html) GMail
 
 # Vocabulary
 
-Dearling is a DSL around GMail API and supports the following verbs
+Darling is a DSL around GMail API and supports the following verbs
   * `send`
   * `reply`
   * `draft`
@@ -74,13 +74,24 @@ darling.clients = [
 package examples
 
 import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver
-import darling.{Darling, DarlingConfiguration, send}
+import darling.{DarlingConfiguration, Mail, send}
+import javax.mail.internet.MimeMessage
 
-object TestMailer {
+/**
+  * Created by spectrum on 5/26/2018.
+  */
+class TestMailer {
   def main(args: Array[String]) {
-        Darling.configure(DarlingConfiguration(new LocalServerReceiver()))
+    // Configure darling
+    Mail.configure(DarlingConfiguration(new LocalServerReceiver()))
+
     
-        send a new Mail from "leia@gmail.com" to "obi_wan@wherever.io" withSubject "Help" andMessage "Help me, Obi-Wan Kenobi. You're my only hope." darling
+    send a new Mail from "leia@gmail.com" to "obi_wan@wherever.io" withSubject "Help" andMessage "Help me, Obi-Wan Kenobi. You're my only hope." darling
+
+    val mimeMsg = someOuterFunctionThatCreatesAMimeMessage
+    send the mimeMsg darling
   }
+
+  private def someOuterFunctionThatCreatesAMimeMessage: MimeMessage = ???
 }
 ```
