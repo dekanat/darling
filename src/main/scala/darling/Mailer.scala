@@ -72,7 +72,7 @@ final class Mail {
 
   @throws(classOf[InvalidPayloadException])
   @throws(classOf[MailerNotConfigured])
-  def darling(implicit conf: DarlingConfiguration): Unit = {
+  def darling: Unit = {
     if (!Mail.isConfigured)
       throw new MailerNotConfigured("Mailer not configured!")
 
