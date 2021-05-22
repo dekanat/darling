@@ -86,7 +86,12 @@ class TestMailer {
     Mail.configure(DarlingConfiguration(new LocalServerReceiver()))
 
     
-    send a new Mail from "leia@gmail.com" to "obi_wan@wherever.io" withSubject "Help" andMessage "Help me, Obi-Wan Kenobi. You're my only hope." darling
+    send a new Mail 
+     from "leia@gmail.com" 
+     to "obi_wan@wherever.io" 
+     withSubject "Help" 
+     andMessage "Help me, Obi-Wan Kenobi. You're my only hope." 
+     darling
 
     val mimeMsg = someOuterFunctionThatCreatesAMimeMessage
     send the mimeMsg darling
