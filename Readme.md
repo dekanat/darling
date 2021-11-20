@@ -77,12 +77,8 @@ import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver
 import darling.{DarlingConfiguration, Mail, send}
 import javax.mail.internet.MimeMessage
 
-/**
-  * Created by spectrum on 5/26/2018.
-  */
 class TestMailer {
   def main(args: Array[String]) {
-    // Configure darling
     Mail.configure(DarlingConfiguration(new LocalServerReceiver()))
 
     
